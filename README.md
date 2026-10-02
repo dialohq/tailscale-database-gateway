@@ -85,10 +85,19 @@ binaries are on `PATH`. PostgreSQL integration tests must run as a non-root user
 
 ## Container image
 
-CI builds and smoke-tests the Linux amd64 image on pull requests. After tests
-pass on `main`, it publishes to `ghcr.io/dialohq/tailscale-database-gateway`
-with `sha-<full-git-commit>` and `latest` tags. Pull requests do not publish images.
-Pin a digest in deployments; `latest` is intended for trying the gateway.
+The image workflow follows Dialo's CI approach: the `cibox` runner uses its
+preinstalled Nix and `nix-fast-build` to build flake checks, then runs the
+generated `pushImages` script. Images are defined in `nix/images.nix` with
+`nix2container` and pushed directly to GHCR with Skopeo and Crane, without a
+Docker daemon. All build definitions and dependencies live in this repository;
+no Dialo checkout or deployment credentials are required.
+
+CI publishes Linux amd64 images to `ghcr.io/dialohq/tailscale-database-gateway`
+with a Nix-derived tag plus `sha-<full-git-commit>` on `main` or
+`pr-<number>-sha-<head-commit>` on same-repository pull requests. Pin a digest in
+deployments. Fork pull requests run the existing Go test workflow but do not
+use the self-hosted runner or publish images. The Go test workflow is unchanged;
+there is no additional image smoke test.
 
 The image runs as UID/GID `1000:1000` and includes CA certificates. Mount the
 gateway configuration, auth key, and any credential files read-only. Provide a
@@ -96,13 +105,15 @@ writable state directory owned by UID 1000 and set `TS_STATE_DIR` to its mount
 path. Configure Vault Proxy and upstream connectivity as described in
 [setup](docs/setup.md); the image does not include a database or Vault Proxy.
 
-To build and load the same image locally on Linux:
+To build the same image locally on Linux:
 
 ```sh
 nix build .#dockerImage
-docker load --input result
-docker image inspect ghcr.io/dialohq/tailscale-database-gateway:local
+nix build .#checks.x86_64-linux.pushImages
 ```
 
-The Nix image reuses the standalone Go package and its tests. It is also part
-of `nix flake check` on Linux.
+The `pushImages` check builds the image and its publishing script; building it
+does not publish anything. CI runs `./result-pushImages/bin/push-images` after
+`nix-fast-build` succeeds. The same script is available as `nix run .#pushImages`
+with `GITHUB_ACTOR`, `GITHUB_TOKEN`, and `GITHUB_SHA` set (plus `PR_NUMBER` and
+`PR_HEAD_COMMIT` for PR tags). The token needs permission to write GHCR packages.
