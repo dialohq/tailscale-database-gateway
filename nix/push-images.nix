@@ -1,4 +1,7 @@
-{pkgs, images}:
+{
+  pkgs,
+  images,
+}:
 pkgs.writeShellApplication {
   name = "push-images";
   runtimeInputs = [pkgs.skopeo pkgs.crane];
