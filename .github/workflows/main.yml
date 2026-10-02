@@ -8,7 +8,8 @@ on:
 
 jobs:
   build-push:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: cibox
     permissions:
       contents: read
       packages: write
@@ -19,16 +20,22 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@1ca7d21a94afc7c957383a2d217460d980de4934 # v31.10.1
 
-      - name: Build checks with nix-fast-build
+      - name: Build image and publishing script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          nix shell --inputs-from . nixpkgs#nix-fast-build -c \
-            nix-fast-build --no-nom --max-jobs 3 --eval-workers 3 --eval-max-memory-size 4096 \
-            --option accept-flake-config false --option eval-cache false --flake '.#checks.x86_64-linux'
+          nix_store=$(nix config show --json | jq -r '.store.value')
+          if [[ "$nix_store" == unix://* ]]; then
+            export NIX_DAEMON_SOCKET_PATH="${nix_store#unix://}"
+            export NIX_REMOTE=daemon
+            NIX_CONFIG=$(printf '%s\n' "${NIX_CONFIG:-}" | sed '/^[[:space:]]*store[[:space:]]*=/d')
+          fi
+          export NIX_CONFIG="${NIX_CONFIG:-}
+          access-tokens = github.com=$GITHUB_TOKEN"
+          nix build .#checks.x86_64-linux.pushImages --out-link result-pushImages --print-build-logs
 
       - name: Push images
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}

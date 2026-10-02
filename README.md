@@ -85,11 +85,9 @@ binaries are on `PATH`. PostgreSQL integration tests must run as a non-root user
 
 ## Container image
 
-The image workflow follows Dialo's CI approach: `nix-fast-build` builds flake
-checks, then CI runs the generated `pushImages` script. GitHub-hosted Linux
-runners install Nix and use the repository's pinned `nix-fast-build` package,
-so the build does not depend on Dialo's repository-scoped `cibox` runner.
-Images are defined in `nix/images.nix` with
+The image workflow uses Dialo's `cibox` runner with Nix preinstalled. A direct
+`nix build` builds the image and its `pushImages` script, then CI runs that
+script to publish. Images are defined in `nix/images.nix` with
 `nix2container` and pushed directly to GHCR with Skopeo and Crane, without a
 Docker daemon. All build definitions and dependencies live in this repository;
 no Dialo checkout or deployment credentials are required.
@@ -97,8 +95,9 @@ no Dialo checkout or deployment credentials are required.
 CI publishes Linux amd64 images to `ghcr.io/dialohq/tailscale-database-gateway`
 with a Nix-derived tag plus `sha-<full-git-commit>` on `main` or
 `pr-<number>-sha-<head-commit>` on same-repository pull requests. Pin a digest in
-deployments. Fork pull requests build but do not publish images. The existing
-Go test workflow is unchanged; there is no additional image smoke test.
+deployments. Fork pull requests run the existing Go test workflow but do not
+use the self-hosted image job. The Go test workflow is unchanged; there is no
+additional image smoke test.
 
 The image runs as UID/GID `1000:1000` and includes CA certificates. Mount the
 gateway configuration, auth key, and any credential files read-only. Provide a
@@ -110,11 +109,11 @@ To build the same image locally on Linux:
 
 ```sh
 nix build .#dockerImage
-nix build .#checks.x86_64-linux.pushImages
+nix build .#checks.x86_64-linux.pushImages --out-link result-pushImages
 ```
 
 The `pushImages` check builds the image and its publishing script; building it
 does not publish anything. CI runs `./result-pushImages/bin/push-images` after
-`nix-fast-build` succeeds. The same script is available as `nix run .#pushImages`
+the build succeeds. The same script is available as `nix run .#pushImages`
 with `GITHUB_ACTOR`, `GITHUB_TOKEN`, and `GITHUB_SHA` set (plus `PR_NUMBER` and
 `PR_HEAD_COMMIT` for PR tags). The token needs permission to write GHCR packages.
