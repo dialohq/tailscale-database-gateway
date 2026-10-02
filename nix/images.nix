@@ -2,8 +2,7 @@
   pkgs,
   gateway,
   nix2container,
-}:
-{
+}: {
   database-gateway = nix2container.buildImage {
     name = "ghcr.io/dialohq/tailscale-database-gateway";
     config = {
