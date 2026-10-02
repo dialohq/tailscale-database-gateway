@@ -82,3 +82,27 @@ nix develop -c ./scripts/test-clickhouse.sh
 
 The scripts also work without Nix when Go, Python 3, and the relevant database
 binaries are on `PATH`. PostgreSQL integration tests must run as a non-root user.
+
+## Container image
+
+CI builds and smoke-tests the Linux amd64 image on pull requests. After tests
+pass on `main`, it publishes to `ghcr.io/dialohq/tailscale-database-gateway`
+with `sha-<full-git-commit>` and `latest` tags. Pull requests do not publish images.
+Pin a digest in deployments; `latest` is intended for trying the gateway.
+
+The image runs as UID/GID `1000:1000` and includes CA certificates. Mount the
+gateway configuration, auth key, and any credential files read-only. Provide a
+writable state directory owned by UID 1000 and set `TS_STATE_DIR` to its mount
+path. Configure Vault Proxy and upstream connectivity as described in
+[setup](docs/setup.md); the image does not include a database or Vault Proxy.
+
+To build and load the same image locally on Linux:
+
+```sh
+nix build .#dockerImage
+docker load --input result
+docker image inspect ghcr.io/dialohq/tailscale-database-gateway:local
+```
+
+The Nix image reuses the standalone Go package and its tests. It is also part
+of `nix flake check` on Linux.

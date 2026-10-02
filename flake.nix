@@ -10,10 +10,17 @@
   in {
     packages = eachSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
-    in {
-      default = import ./nix/package.nix {inherit pkgs;};
-    });
-    checks = eachSystem (system: {build = self.packages.${system}.default;});
+      gateway = import ./nix/package.nix {inherit pkgs;};
+    in
+      {default = gateway;}
+      // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        dockerImage = import ./nix/image.nix {inherit pkgs gateway;};
+      });
+    checks = eachSystem (system:
+      {build = self.packages.${system}.default;}
+      // nixpkgs.lib.optionalAttrs nixpkgs.legacyPackages.${system}.stdenv.isLinux {
+        dockerImage = self.packages.${system}.dockerImage;
+      });
     devShells = eachSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
     in {
