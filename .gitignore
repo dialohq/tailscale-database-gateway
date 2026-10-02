@@ -1,0 +1,7 @@
+/database-gateway
+/result*
+/.direnv/
+*.test
+coverage.out
+/.dnvr/
+/state/

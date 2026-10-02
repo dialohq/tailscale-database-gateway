@@ -1,0 +1,22 @@
+{
+  "postgres": {
+    "backend": "postgres",
+    "port": 5432,
+    "upstream": "postgresql://postgres.internal:5432/postgres?sslmode=verify-full&sslrootcert=/etc/postgres/ca.crt",
+    "capability": "example.com/cap/postgres",
+    "vault_roles": {
+      "readonly": {"policy": "postgres-gateway-readonly", "path": "postgres/creds/readonly"}
+    }
+  },
+  "clickhouse": {
+    "backend": "clickhouse",
+    "native_port": 9000,
+    "native_upstream": "clickhouse.internal:9000",
+    "http_port": 8123,
+    "http_upstream": "http://clickhouse.internal:8123",
+    "capability": "example.com/cap/clickhouse",
+    "vault_roles": {
+      "readonly": {"policy": "clickhouse-gateway-readonly", "path": "clickhouse/creds/readonly"}
+    }
+  }
+}
