@@ -85,7 +85,7 @@ binaries are on `PATH`. PostgreSQL integration tests must run as a non-root user
 
 ## Container image
 
-The image workflow uses Dialo's `cibox` runner with Nix preinstalled. A direct
+The image workflow installs Nix on a GitHub-hosted Linux runner. A direct
 `nix build` builds the image and its `pushImages` script, then CI runs that
 script to publish. Images are defined in `nix/images.nix` with
 `nix2container` and pushed directly to GHCR with Skopeo and Crane, without a
@@ -96,8 +96,11 @@ CI publishes Linux amd64 images to `ghcr.io/dialohq/tailscale-database-gateway`
 with a Nix-derived tag plus `sha-<full-git-commit>` on `main` or
 `pr-<number>-sha-<head-commit>` on same-repository pull requests. Pin a digest in
 deployments. Fork pull requests run the existing Go test workflow but do not
-use the self-hosted image job. The Go test workflow is unchanged; there is no
-additional image smoke test.
+run the image-publishing job. Both workflows use GitHub-hosted runners; this
+repository does not need access to any shared self-hosted runner. Do not grant
+it shared-runner access: fork PRs can modify workflow files, so a YAML job
+condition alone is not a runner-access security boundary. The Go test workflow
+is unchanged; there is no additional image smoke test.
 
 The image runs as UID/GID `1000:1000` and includes CA certificates. Mount the
 gateway configuration, auth key, and any credential files read-only. Provide a
