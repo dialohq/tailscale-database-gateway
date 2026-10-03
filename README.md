@@ -86,11 +86,10 @@ binaries are on `PATH`. PostgreSQL integration tests must run as a non-root user
 ## Container image
 
 The image workflow installs Nix on a GitHub-hosted Linux runner. A direct
-`nix build` builds the image and its `pushImages` script, then CI runs that
-script to publish. Images are defined in `nix/images.nix` with
-`nix2container` and pushed directly to GHCR with Skopeo and Crane, without a
-Docker daemon. All build definitions and dependencies live in this repository;
-no Dialo checkout or deployment credentials are required.
+`nix build .#image` builds the single image defined in `nix/image.nix` with
+`nix2container`. The workflow authenticates to GHCR, publishes using
+`nix2container`'s `copyToRegistry` helper, and adds a commit or PR tag with
+Crane. No Docker daemon, Dialo checkout, or deployment credentials are required.
 
 CI publishes Linux amd64 images to `ghcr.io/dialohq/tailscale-database-gateway`
 with a Nix-derived tag plus `sha-<full-git-commit>` on `main` or
@@ -111,12 +110,9 @@ path. Configure Vault Proxy and upstream connectivity as described in
 To build the same image locally on Linux:
 
 ```sh
-nix build .#dockerImage
-nix build .#checks.x86_64-linux.pushImages --out-link result-pushImages
+nix build .#image
 ```
 
-The `pushImages` check builds the image and its publishing script; building it
-does not publish anything. CI runs `./result-pushImages/bin/push-images` after
-the build succeeds. The same script is available as `nix run .#pushImages`
-with `GITHUB_ACTOR`, `GITHUB_TOKEN`, and `GITHUB_SHA` set (plus `PR_NUMBER` and
-`PR_HEAD_COMMIT` for PR tags). The token needs permission to write GHCR packages.
+Building does not publish anything. With GHCR credentials configured for
+Skopeo, `nix run .#image.copyToRegistry` publishes the Nix-derived image tag.
+CI handles authentication and additional tags in `.github/workflows/main.yml`.

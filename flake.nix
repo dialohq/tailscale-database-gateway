@@ -16,28 +16,15 @@
     packages = eachSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
       gateway = import ./nix/package.nix {inherit pkgs;};
-      images = import ./nix/images.nix {
-        inherit pkgs gateway;
-        inherit (nix2container.packages.${system}) nix2container;
-      };
     in
       {default = gateway;}
       // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-        dockerImage = images.database-gateway;
-        pushImages = import ./nix/push-images.nix {inherit pkgs images;};
-      });
-    checks = eachSystem (system:
-      {build = self.packages.${system}.default;}
-      // nixpkgs.lib.optionalAttrs nixpkgs.legacyPackages.${system}.stdenv.isLinux {
-        pushImages = self.packages.${system}.pushImages;
-      });
-    apps = eachSystem (system:
-      nixpkgs.lib.optionalAttrs nixpkgs.legacyPackages.${system}.stdenv.isLinux {
-        pushImages = {
-          type = "app";
-          program = "${self.packages.${system}.pushImages}/bin/push-images";
+        image = import ./nix/image.nix {
+          inherit pkgs gateway;
+          inherit (nix2container.packages.${system}) nix2container;
         };
       });
+    checks = eachSystem (system: {build = self.packages.${system}.default;});
     devShells = eachSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
     in {
