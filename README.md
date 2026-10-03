@@ -82,37 +82,3 @@ nix develop -c ./scripts/test-clickhouse.sh
 
 The scripts also work without Nix when Go, Python 3, and the relevant database
 binaries are on `PATH`. PostgreSQL integration tests must run as a non-root user.
-
-## Container image
-
-The image workflow installs Nix on a GitHub-hosted Linux runner. A direct
-`nix build .#image` builds the single image defined in `nix/image.nix` with
-`nix2container`. The workflow authenticates to GHCR, publishes using
-`nix2container`'s `copyToRegistry` helper, and adds a commit or PR tag with
-Crane. No Docker daemon, Dialo checkout, or deployment credentials are required.
-
-CI publishes Linux amd64 images to `ghcr.io/dialohq/tailscale-database-gateway`
-with a Nix-derived tag plus `sha-<full-git-commit>` on `main` or
-`pr-<number>-sha-<head-commit>` on same-repository pull requests. Pin a digest in
-deployments. Fork pull requests run the existing Go test workflow but do not
-run the image-publishing job. Both workflows use GitHub-hosted runners; this
-repository does not need access to any shared self-hosted runner. Do not grant
-it shared-runner access: fork PRs can modify workflow files, so a YAML job
-condition alone is not a runner-access security boundary. The Go test workflow
-is unchanged; there is no additional image smoke test.
-
-The image runs as UID/GID `1000:1000` and includes CA certificates. Mount the
-gateway configuration, auth key, and any credential files read-only. Provide a
-writable state directory owned by UID 1000 and set `TS_STATE_DIR` to its mount
-path. Configure Vault Proxy and upstream connectivity as described in
-[setup](docs/setup.md); the image does not include a database or Vault Proxy.
-
-To build the same image locally on Linux:
-
-```sh
-nix build .#image
-```
-
-Building does not publish anything. With GHCR credentials configured for
-Skopeo, `nix run .#image.copyToRegistry` publishes the Nix-derived image tag.
-CI handles authentication and additional tags in `.github/workflows/main.yml`.
