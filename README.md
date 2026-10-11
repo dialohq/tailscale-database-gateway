@@ -1,10 +1,9 @@
 # Tailscale database gateway
 
-Tailscale database gateway is a PostgreSQL and ClickHouse proxy that authorizes
-database users based on Tailscale ACLs. Clients connect with their existing database
-tools, using a granted role as their username instead of a database password. The gateway
-acts as a proxy and authenticates the user to an upstream database using
-either a static user/pass from a file or dynamic identities thru Hasicorp Vault.
+Tailscale database gateway is a proxy that authorizes
+database users based on Tailscale ACLs without using a password. The gateway authenticates
+the user to an upstream database using either a static user/pass
+from a file or dynamic identities thru Hasicorp Vault.
 
 It supports PostgreSQL, ClickHouse native TCP, and ClickHouse HTTP in one process.
 
