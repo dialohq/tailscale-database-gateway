@@ -23,8 +23,8 @@ This example uses an existing PostgreSQL login, with no Vault setup:
 
 - **A Tailscale auth key**, created in the Tailscale admin console, so the gateway
   can join your tailnet.
-- **Your database's hostname, port, database name, username, password, and CA
-  certificate**, from your database administrator or provider. The login must
+- **Your database's hostname, port, database name, username, and password**,
+  from your database administrator or provider. The login must
   already have the SQL permissions you want clients to use.
 - **Access to edit your tailnet policy**, or an administrator who can grant
   clients access to the gateway.
@@ -53,7 +53,7 @@ the client-visible role `readonly` to a database credentials file:
   "postgres": {
     "backend": "postgres",
     "port": 5432,
-    "upstream": "postgresql://postgres.internal:5432/postgres?sslmode=verify-full&sslrootcert=/etc/database-gateway/ca.crt",
+    "upstream": "postgresql://postgres.example.com:5432/postgres?sslmode=verify-full&sslrootcert=system",
     "capability": "example.com/cap/postgres",
     "credential_files": {
       "readonly": "/etc/database-gateway/readonly.json"
@@ -62,8 +62,12 @@ the client-visible role `readonly` to a database credentials file:
 }
 ```
 
-Put your database's CA certificate in `gateway/ca.crt` and its login in
-`gateway/readonly.json`:
+This verifies the database certificate using the image's built-in CA bundle.
+If your database uses a private CA, obtain its certificate from your administrator,
+save it as `gateway/ca.crt`, and replace `sslrootcert=system` with
+`sslrootcert=/etc/database-gateway/ca.crt`.
+
+Put the database login in `gateway/readonly.json`:
 
 ```json
 {"username": "existing_database_user", "password": "database_password"}
