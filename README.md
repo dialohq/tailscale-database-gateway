@@ -37,8 +37,8 @@ for authorized callers. You'll need a configured database secrets engine,
 dynamic roles and policies, and an authenticated Vault Proxy.
 
 Use `vault_roles` instead of `credential_files` in the database configuration,
-and set `VAULT_ADDR` to the Proxy's address and `VAULT_TOKEN_ROLE` to your
-configured child-token role. Follow [Vault setup](docs/setup.md#vault); the
+and set `VAULT_ADDR` to the authenticated Vault Proxy's listener URL and
+`VAULT_TOKEN_ROLE` to your configured child-token role. Follow [Vault setup](docs/setup.md#vault); the
 [combined example](examples/config.json) shows PostgreSQL and ClickHouse mappings.
 
 </details>
@@ -81,15 +81,15 @@ In your tailnet policy, allow clients to reach the gateway on port 5432 and gran
 them `example.com/cap/postgres` with `[{"role":"readonly"}]`. See
 [setup](docs/setup.md#tailscale) for application grant syntax.
 
-Export `TS_AUTHKEY` in your shell with your Tailscale auth key. This key joins
-the tailnet; it is separate from the database login in `readonly.json`.
-Then start the container on Linux from the directory containing `gateway/`:
+Save the Tailscale auth key in `gateway/authkey`. Mount the configuration and
+secret files read-only when starting the container:
 
 ```sh
+chmod 600 gateway/authkey gateway/readonly.json
 mkdir -p state
 docker run -d --name database-gateway \
   --user "$(id -u):$(id -g)" \
-  -e TS_AUTHKEY \
+  -e TS_AUTHKEY_FILE=/etc/database-gateway/authkey \
   -e TS_HOSTNAME=database-gateway \
   -e TS_STATE_DIR=/var/lib/database-gateway \
   -e DATABASE_GATEWAY_CONFIG_FILE=/etc/database-gateway/config.json \
@@ -107,17 +107,13 @@ arrive over Tailscale, so no Docker port publishing is needed. The gateway store
 Tailscale state in `state/` and writes logs to standard output.
 
 <details>
-<summary>Kubernetes and file-mounted auth keys</summary>
+<summary>Kubernetes</summary>
 
 Use the same image, environment variables, and configuration paths in a
-Deployment. Supply the auth key and database login from Kubernetes Secrets,
-mount the configuration read-only, and provide writable state and `/tmp` volumes.
+Deployment. Mount the auth key and database login as files from Kubernetes
+Secrets, mount the configuration read-only, and provide writable state and `/tmp` volumes.
 Set `runAsUser`, `runAsGroup`, and `fsGroup` to `1000` for the image's default user.
 A Kubernetes Service is not required for tailnet access.
-
-If you prefer to mount the Tailscale auth key as a file, set `TS_AUTHKEY_FILE`
-to its path **instead of** setting `TS_AUTHKEY`. This is optional and independent
-of the database credentials file above.
 
 For replaceable pods, use a reusable, pre-authorized auth key and a unique
 `TS_HOSTNAME` per pod. See Service mode below for a stable client endpoint.
