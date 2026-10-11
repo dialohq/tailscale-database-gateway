@@ -77,7 +77,7 @@ Keep the credentials file private and out of source control. `readonly` is the
 role clients request, not a permission the gateway creates: give the upstream
 login the appropriate SQL privileges yourself.
 
-In your tailnet policy, allow clients to reach the gateway on port 5432 and grant
+[In your tailnet policy](https://login.tailscale.com/admin/acls), allow clients to reach the gateway on port 5432 and grant
 them `example.com/cap/postgres` with `[{"role":"readonly"}]`. See
 [setup](docs/setup.md#tailscale) for application grant syntax.
 
