@@ -138,13 +138,6 @@ For multiple gateway instances behind a Tailscale Service, also set
 advertisements. Without `TS_SERVICE_NAME`, the gateway listens directly on its
 own tailnet node.
 
-### Stop and remove
-
-Stop and remove the gateway through your container runtime, then remove its
-state volume and deployment resources when no longer needed.
-Remove any dedicated auth keys, grants, Service configuration, and Vault
-resources separately; stopping the gateway does not remove them.
-
 ## How it works
 
 The gateway resolves the caller's Tailscale identity and requires an application
