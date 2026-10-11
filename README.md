@@ -90,15 +90,27 @@ them `example.com/cap/postgres` with `[{"role":"readonly"}]`. See
 
 #### Environment variables
 
-Set these in your container runtime alongside the config file. All paths below
-refer to locations **inside the container**:
+Set these in your container runtime alongside the config file. All paths refer
+to locations **inside the container**:
 
-| Variable | Example value | Purpose |
+| Variable | Required? | Purpose / example |
 | --- | --- | --- |
-| `DATABASE_GATEWAY_CONFIG_FILE` | `/etc/database-gateway/config.json` | Path to the JSON config above. |
-| `TS_AUTHKEY_FILE` | `/etc/database-gateway/authkey` | Path to a mounted secret containing the Tailscale auth key. |
-| `TS_HOSTNAME` | `database-gateway` | The gateway's name on your tailnet. |
-| `TS_STATE_DIR` | `/var/lib/database-gateway` | Writable directory for Tailscale state. |
+| `DATABASE_GATEWAY_CONFIG_FILE` | **Required** | Path to the JSON config, e.g. `/etc/database-gateway/config.json`. |
+| `TS_HOSTNAME` | **Required** | The gateway's name on your tailnet, e.g. `database-gateway`. |
+| `TS_STATE_DIR` | **Required** | Writable directory for Tailscale state, e.g. `/var/lib/database-gateway`. |
+| `TS_AUTHKEY_FILE` | **Optional** | Mounted secret containing the Tailscale auth key, e.g. `/etc/database-gateway/authkey`. Preferred over environment-based secrets. |
+| `TS_AUTHKEY` | **Optional** | Tailscale auth key supplied directly; used when `TS_AUTHKEY_FILE` is unset. `TS_AUTH_KEY` is a fallback alias. |
+| `TS_CLIENT_SECRET` | **Optional** | Tailscale OAuth client secret for enrollment; used when no auth key is supplied. Requires advertised tags. |
+| `TS_SERVICE_NAME` | **Optional** | Tailscale Service to advertise, e.g. `svc:database-gateway`. Create the Service and approve its advertisements first. Unset: listen on the gateway's own tailnet node. |
+| `TS_ADVERTISE_TAGS` | **Optional**; required for Service mode or OAuth enrollment | Comma-separated tags, e.g. `tag:database-gateway`. |
+| `TS_CONTROL_URL` | **Optional** | Custom control server URL, e.g. for Headscale. Unset: use Tailscale's control server. |
+| `VAULT_ADDR` | **Optional**; required when using `vault_roles` | Authenticated Vault Proxy's listener URL. HTTP is allowed only on loopback; remote addresses require HTTPS. |
+| `VAULT_TOKEN_ROLE` | **Optional**; required when using `vault_roles` | Vault child-token role, e.g. `database-gateway-database`. |
+| `SSL_CERT_FILE` | **Optional** | Override the system CA bundle. The image sets `/etc/ssl/certs/ca-bundle.crt`. |
+
+For unattended enrollment of a new node, supply an auth-key file, an auth-key
+environment variable, or an OAuth client secret—not all three. `VAULT_TOKEN` and
+`VAULT_NAMESPACE` are deliberately ignored; Vault Proxy handles authentication.
 
 Mount configuration and secret files read-only. The image runs as UID/GID
 `1000:1000`; that user must be able to read the files and write to the state
@@ -116,7 +128,7 @@ Set `runAsUser`, `runAsGroup`, and `fsGroup` to `1000` for the image's default u
 A Kubernetes Service is not required for tailnet access.
 
 For replaceable pods, use a reusable, pre-authorized auth key and a unique
-`TS_HOSTNAME` per pod. See Service mode below for a stable client endpoint.
+`TS_HOSTNAME` per pod. Use `TS_SERVICE_NAME` for a stable client endpoint.
 
 </details>
 
@@ -132,11 +144,6 @@ psql 'host=database-gateway.example.ts.net port=5432 dbname=app user=readonly'
 The PostgreSQL client must explicitly select both a role and a database. Its
 connection to the gateway is encrypted by Tailscale rather than PostgreSQL TLS;
 configure upstream TLS separately, using `sslmode=verify-full` and a trusted CA.
-
-For multiple gateway instances behind a Tailscale Service, also set
-`TS_SERVICE_NAME` and `TS_ADVERTISE_TAGS`, then create the Service and approve its
-advertisements. Without `TS_SERVICE_NAME`, the gateway listens directly on its
-own tailnet node.
 
 ## How it works
 
