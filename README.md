@@ -1,34 +1,23 @@
 # Tailscale database gateway
 
 Tailscale database gateway is a PostgreSQL and ClickHouse proxy that authorizes
-human users and tagged machines with Tailscale application grants and obtains
-database credentials from Vault. Clients connect with their existing database
-tools, using a granted role as their username instead of a database password.
+database users based on Tailscale ACLs. Clients connect with their existing database
+tools, using a granted role as their username instead of a database password. The gateway
+acts as a proxy and authenticates the user to an upstream database using
+either a static user/pass from a file or dynamic identities thru Hasicorp Vault.
 
 It supports PostgreSQL, ClickHouse native TCP, and ClickHouse HTTP in one process.
 
-## Install
-
-Use the published container image with Docker, Kubernetes, or another OCI
-runtime. The image below is for **Linux/amd64**. This pins a published build;
-newer builds are listed in
-[the container registry](https://github.com/dialohq/tailscale-database-gateway/pkgs/container/tailscale-database-gateway).
-
-```sh
-IMAGE=ghcr.io/dialohq/tailscale-database-gateway@sha256:e074491f9880c729bc36bb2ab08988afdeec0cedf0c1422af0b5005b43bc63e2
-docker pull "$IMAGE"
-```
-
-Pulling downloads image layers; it does not start the gateway. Running it joins
-your tailnet as an ephemeral node, writes state to `TS_STATE_DIR`, connects to
-your databases and Vault Proxy, and writes logs to standard output. It reads
-the configuration, auth key, and CA files you mount. Database listeners use the
-embedded Tailscale network: no Docker `-p`, Kubernetes Service, host Tailscale
-daemon, or privileged container is required.
-
 ## Usage
 
-### Configure
+Use the published container image with Docker, Kubernetes, or another OCI
+runtime.
+
+```sh
+ghcr.io/dialohq/tailscale-database-gateway
+```
+
+### Configuration
 
 First provision a tailnet auth key, network access and application grants, and
 database roles. For dynamic credentials, also configure Vault's database secrets
