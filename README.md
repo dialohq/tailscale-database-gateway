@@ -13,8 +13,8 @@ Use the published container image with Docker, Kubernetes, or another OCI
 runtime. Replace `<tag>` with a published tag from
 [the container registry](https://github.com/dialohq/tailscale-database-gateway/pkgs/container/tailscale-database-gateway):
 
-```sh
-IMAGE='ghcr.io/dialohq/tailscale-database-gateway:<tag>'
+```text
+ghcr.io/dialohq/tailscale-database-gateway:<tag>
 ```
 
 ### What you'll need
@@ -45,8 +45,15 @@ and set `VAULT_ADDR` to the authenticated Vault Proxy's listener URL and
 
 ### Configuration
 
-Create `gateway/config.json` with your database's hostname and port. This maps
-the client-visible role `readonly` to a database credentials file:
+**Both a config file and environment variables are required.** The file defines
+database destinations and credentials; the environment variables tell the gateway
+where to find that file and how to join your tailnet.
+
+#### Config file
+
+Make this JSON file available to the container, for example at
+`/etc/database-gateway/config.json`. Replace the database hostname and port with
+your own. The `readonly` role maps to a database credentials file:
 
 ```json
 {
@@ -64,10 +71,10 @@ the client-visible role `readonly` to a database credentials file:
 
 This verifies the database certificate using the image's built-in CA bundle.
 If your database uses a private CA, obtain its certificate from your administrator,
-save it as `gateway/ca.crt`, and replace `sslrootcert=system` with
+mount it at `/etc/database-gateway/ca.crt`, and replace `sslrootcert=system` with
 `sslrootcert=/etc/database-gateway/ca.crt`.
 
-Put the database login in `gateway/readonly.json`:
+Provide the database login at `/etc/database-gateway/readonly.json`:
 
 ```json
 {"username": "existing_database_user", "password": "database_password"}
@@ -81,30 +88,23 @@ login the appropriate SQL privileges yourself.
 them `example.com/cap/postgres` with `[{"role":"readonly"}]`. See
 [setup](docs/setup.md#tailscale) for application grant syntax.
 
-Save the Tailscale auth key in `gateway/authkey`. Mount the configuration and
-secret files read-only when starting the container:
+#### Environment variables
 
-```sh
-chmod 600 gateway/authkey gateway/readonly.json
-mkdir -p state
-docker run -d --name database-gateway \
-  --user "$(id -u):$(id -g)" \
-  -e TS_AUTHKEY_FILE=/etc/database-gateway/authkey \
-  -e TS_HOSTNAME=database-gateway \
-  -e TS_STATE_DIR=/var/lib/database-gateway \
-  -e DATABASE_GATEWAY_CONFIG_FILE=/etc/database-gateway/config.json \
-  --mount type=bind,src="$PWD/gateway",dst=/etc/database-gateway,readonly \
-  --mount type=bind,src="$PWD/state",dst=/var/lib/database-gateway \
-  --tmpfs /tmp:mode=1777 \
-  "$IMAGE"
-docker logs -f database-gateway
-```
+Set these in your container runtime alongside the config file. All paths below
+refer to locations **inside the container**:
 
-The image defaults to UID/GID `1000:1000`; this command overrides it to match the
-host user who owns `state/` and the mounted files. The upstream hosts in your
-configuration must be reachable from the container's network. Client connections
-arrive over Tailscale, so no Docker port publishing is needed. The gateway stores
-Tailscale state in `state/` and writes logs to standard output.
+| Variable | Example value | Purpose |
+| --- | --- | --- |
+| `DATABASE_GATEWAY_CONFIG_FILE` | `/etc/database-gateway/config.json` | Path to the JSON config above. |
+| `TS_AUTHKEY_FILE` | `/etc/database-gateway/authkey` | Path to a mounted secret containing the Tailscale auth key. |
+| `TS_HOSTNAME` | `database-gateway` | The gateway's name on your tailnet. |
+| `TS_STATE_DIR` | `/var/lib/database-gateway` | Writable directory for Tailscale state. |
+
+Mount configuration and secret files read-only. The image runs as UID/GID
+`1000:1000`; that user must be able to read the files and write to the state
+directory and `/tmp`. Database hosts must be reachable from the container.
+Client connections arrive over Tailscale, so no host port publishing is needed.
+Logs go to standard output.
 
 <details>
 <summary>Kubernetes</summary>
@@ -140,9 +140,8 @@ own tailnet node.
 
 ### Stop and remove
 
-For Docker, run `docker stop database-gateway` and `docker rm database-gateway`.
-Remove the image with `docker image rm "$IMAGE"` and delete `state/` when no
-longer needed. For Kubernetes, delete the resources you created.
+Stop and remove the gateway through your container runtime, then remove its
+state volume and deployment resources when no longer needed.
 Remove any dedicated auth keys, grants, Service configuration, and Vault
 resources separately; stopping the gateway does not remove them.
 
