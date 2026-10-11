@@ -29,6 +29,20 @@ This example uses an existing PostgreSQL login, with no Vault setup:
 - **Access to edit your tailnet policy**, or an administrator who can grant
   clients access to the gateway.
 
+<details>
+<summary>Temporary database credentials with HashiCorp Vault (advanced)</summary>
+
+Instead of keeping a database login in a file, Vault can create temporary logins
+for authorized callers. You'll need a configured database secrets engine,
+dynamic roles and policies, and an authenticated Vault Proxy.
+
+Use `vault_roles` instead of `credential_files` in the database configuration,
+and set `VAULT_ADDR` to the Proxy's address and `VAULT_TOKEN_ROLE` to your
+configured child-token role. Follow [Vault setup](docs/setup.md#vault); the
+[combined example](examples/config.json) shows PostgreSQL and ClickHouse mappings.
+
+</details>
+
 ### Configuration
 
 Create `gateway/config.json` with your database's hostname and port. This maps
@@ -62,10 +76,6 @@ login the appropriate SQL privileges yourself.
 In your tailnet policy, allow clients to reach the gateway on port 5432 and grant
 them `example.com/cap/postgres` with `[{"role":"readonly"}]`. See
 [setup](docs/setup.md#tailscale) for application grant syntax.
-
-For Vault-issued credentials, use `vault_roles` instead of `credential_files` and
-follow [Vault setup](docs/setup.md#vault). The
-[combined example](examples/config.json) shows both PostgreSQL and ClickHouse.
 
 Export `TS_AUTHKEY` in your shell with your Tailscale auth key. This key joins
 the tailnet; it is separate from the database login in `readonly.json`.
