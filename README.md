@@ -1,67 +1,84 @@
 # Tailscale database gateway
 
-Tailscale database gateway is a proxy that authorizes
-database users based on Tailscale ACLs without using a password. The gateway authenticates
-the user to an upstream database using either a static user/pass
-from a file or dynamic identities thru Hasicorp Vault.
+Tailscale database gateway is a proxy that gives users passwordless database
+access based on their Tailscale identity and application grants. It authenticates
+to the upstream database using either a username and password from a file or
+temporary credentials issued by HashiCorp Vault.
 
 It supports PostgreSQL, ClickHouse native TCP, and ClickHouse HTTP in one process.
 
 ## Usage
 
 Use the published container image with Docker, Kubernetes, or another OCI
-runtime.
+runtime. Replace `<tag>` with a published tag from
+[the container registry](https://github.com/dialohq/tailscale-database-gateway/pkgs/container/tailscale-database-gateway):
 
 ```sh
-ghcr.io/dialohq/tailscale-database-gateway
+IMAGE='ghcr.io/dialohq/tailscale-database-gateway:<tag>'
 ```
+
+### What you'll need
+
+This example uses an existing PostgreSQL login, with no Vault setup:
+
+- **A Tailscale auth key**, created in the Tailscale admin console, so the gateway
+  can join your tailnet.
+- **Your database's hostname, port, database name, username, password, and CA
+  certificate**, from your database administrator or provider. The login must
+  already have the SQL permissions you want clients to use.
+- **Access to edit your tailnet policy**, or an administrator who can grant
+  clients access to the gateway.
 
 ### Configuration
 
-First provision a tailnet auth key, network access and application grants, and
-database roles. For dynamic credentials, also configure Vault's database secrets
-engine and an authenticated Vault Proxy as described in [setup](docs/setup.md).
-The gateway does not provision these resources or define your SQL permissions.
+Create `gateway/config.json` with your database's hostname and port. This maps
+the client-visible role `readonly` to a database credentials file:
 
-Create a local `gateway/` directory containing:
-
-- `config.json`: adapt [the example configuration](examples/config.json) to your
-  upstream hosts, capabilities, and Vault role mappings. Remove unused destinations.
-- `authkey`: your Tailscale auth key, readable only by the account running the gateway.
-- Any database CA files referenced by your config, using paths under
-  `/etc/database-gateway/` inside the container.
-
-Create `gateway.env` with these container-side paths and your Vault Proxy address:
-
-```dotenv
-DATABASE_GATEWAY_CONFIG_FILE=/etc/database-gateway/config.json
-TS_HOSTNAME=database-gateway
-TS_STATE_DIR=/var/lib/database-gateway
-TS_AUTHKEY_FILE=/etc/database-gateway/authkey
-VAULT_ADDR=https://vault-proxy.example.com:8200
-VAULT_TOKEN_ROLE=database-gateway-database
+```json
+{
+  "postgres": {
+    "backend": "postgres",
+    "port": 5432,
+    "upstream": "postgresql://postgres.internal:5432/postgres?sslmode=verify-full&sslrootcert=/etc/database-gateway/ca.crt",
+    "capability": "example.com/cap/postgres",
+    "credential_files": {
+      "readonly": "/etc/database-gateway/readonly.json"
+    }
+  }
+}
 ```
 
-Keep Vault Proxy private and restrict access to the gateway. A remote Proxy must
-use HTTPS with a certificate trusted by the container. If it runs in the same
-network namespace (for example, a Kubernetes sidecar), use its loopback address,
-such as `http://127.0.0.1:8200`. Another Docker container is not on loopback unless
-you explicitly share its network namespace.
+Put your database's CA certificate in `gateway/ca.crt` and its login in
+`gateway/readonly.json`:
 
-For development or externally managed credentials, use `credential_files`
-instead of `vault_roles` as described in [setup](docs/setup.md#file-credentials).
-Mount those files under the same configuration directory and omit the Vault
-environment variables. This uses existing logins rather than creating users.
+```json
+{"username": "existing_database_user", "password": "database_password"}
+```
 
-### Run with Docker
+Keep the credentials file private and out of source control. `readonly` is the
+role clients request, not a permission the gateway creates: give the upstream
+login the appropriate SQL privileges yourself.
 
-On Linux, from the directory containing `gateway/` and `gateway.env`:
+In your tailnet policy, allow clients to reach the gateway on port 5432 and grant
+them `example.com/cap/postgres` with `[{"role":"readonly"}]`. See
+[setup](docs/setup.md#tailscale) for application grant syntax.
+
+For Vault-issued credentials, use `vault_roles` instead of `credential_files` and
+follow [Vault setup](docs/setup.md#vault). The
+[combined example](examples/config.json) shows both PostgreSQL and ClickHouse.
+
+Export `TS_AUTHKEY` in your shell with your Tailscale auth key. This key joins
+the tailnet; it is separate from the database login in `readonly.json`.
+Then start the container on Linux from the directory containing `gateway/`:
 
 ```sh
 mkdir -p state
 docker run -d --name database-gateway \
   --user "$(id -u):$(id -g)" \
-  --env-file gateway.env \
+  -e TS_AUTHKEY \
+  -e TS_HOSTNAME=database-gateway \
+  -e TS_STATE_DIR=/var/lib/database-gateway \
+  -e DATABASE_GATEWAY_CONFIG_FILE=/etc/database-gateway/config.json \
   --mount type=bind,src="$PWD/gateway",dst=/etc/database-gateway,readonly \
   --mount type=bind,src="$PWD/state",dst=/var/lib/database-gateway \
   --tmpfs /tmp:mode=1777 \
@@ -71,94 +88,35 @@ docker logs -f database-gateway
 
 The image defaults to UID/GID `1000:1000`; this command overrides it to match the
 host user who owns `state/` and the mounted files. The upstream hosts in your
-configuration must be reachable from the container's network.
+configuration must be reachable from the container's network. Client connections
+arrive over Tailscale, so no Docker port publishing is needed. The gateway stores
+Tailscale state in `state/` and writes logs to standard output.
 
 <details>
-<summary>Run with Kubernetes instead</summary>
+<summary>Kubernetes and file-mounted auth keys</summary>
 
-In your chosen namespace, create resources from the same files. The Secret
-contains your auth key; do not commit its contents to source control.
+Use the same image, environment variables, and configuration paths in a
+Deployment. Supply the auth key and database login from Kubernetes Secrets,
+mount the configuration read-only, and provide writable state and `/tmp` volumes.
+Set `runAsUser`, `runAsGroup`, and `fsGroup` to `1000` for the image's default user.
+A Kubernetes Service is not required for tailnet access.
 
-```sh
-kubectl create secret generic database-gateway-files --from-file=gateway/
-kubectl create configmap database-gateway-env --from-env-file=gateway.env
-```
+If you prefer to mount the Tailscale auth key as a file, set `TS_AUTHKEY_FILE`
+to its path **instead of** setting `TS_AUTHKEY`. This is optional and independent
+of the database credentials file above.
 
-Save this as `database-gateway.yaml`, then run
-`kubectl apply -f database-gateway.yaml` in the same namespace:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: database-gateway
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: database-gateway
-  template:
-    metadata:
-      labels:
-        app: database-gateway
-    spec:
-      nodeSelector:
-        kubernetes.io/os: linux
-        kubernetes.io/arch: amd64
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: gateway
-          image: ghcr.io/dialohq/tailscale-database-gateway@sha256:e074491f9880c729bc36bb2ab08988afdeec0cedf0c1422af0b5005b43bc63e2
-          envFrom:
-            - configMapRef:
-                name: database-gateway-env
-          env:
-            - name: TS_HOSTNAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          volumeMounts:
-            - {name: config, mountPath: /etc/database-gateway, readOnly: true}
-            - {name: state, mountPath: /var/lib/database-gateway}
-            - {name: tmp, mountPath: /tmp}
-      volumes:
-        - name: config
-          secret:
-            secretName: database-gateway-files
-            defaultMode: 0440
-        - name: state
-          emptyDir: {}
-        - name: tmp
-          emptyDir: {}
-```
-
-This example assumes an existing remote Vault Proxy; it does not deploy Vault.
-State survives container restarts but not pod replacement. Use a reusable,
-pre-authorized Tailscale auth key for replacement pods. Each pod gets its own
-hostname; use Service mode below for a stable client endpoint and multiple replicas.
+For replaceable pods, use a reusable, pre-authorized auth key and a unique
+`TS_HOSTNAME` per pod. See Service mode below for a stable client endpoint.
 
 </details>
 
 ### Connect
 
 From an authorized tailnet client, substitute your gateway's tailnet DNS name
-and database name (or the pod's tailnet name for the Kubernetes example):
+and database name:
 
 ```sh
 psql 'host=database-gateway.example.ts.net port=5432 dbname=app user=readonly'
-clickhouse-client --host database-gateway.example.ts.net --user readonly
 ```
 
 The PostgreSQL client must explicitly select both a role and a database. Its
@@ -174,8 +132,8 @@ own tailnet node.
 
 For Docker, run `docker stop database-gateway` and `docker rm database-gateway`.
 Remove the image with `docker image rm "$IMAGE"` and delete `state/` when no
-longer needed. For Kubernetes, delete the Deployment, ConfigMap, and Secret you
-created. Remove any dedicated auth keys, grants, Service configuration, and Vault
+longer needed. For Kubernetes, delete the resources you created.
+Remove any dedicated auth keys, grants, Service configuration, and Vault
 resources separately; stopping the gateway does not remove them.
 
 ## How it works
