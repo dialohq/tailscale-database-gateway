@@ -45,9 +45,7 @@ and set `VAULT_ADDR` to the authenticated Vault Proxy's listener URL and
 
 ### Configuration
 
-**Both a config file and environment variables are required.** The file defines
-database destinations and credentials; the environment variables tell the gateway
-where to find that file and how to join your tailnet.
+Both a config file and environment variables are required.
 
 #### Config file
 
