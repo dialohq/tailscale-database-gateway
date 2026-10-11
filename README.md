@@ -5,6 +5,8 @@ access based on their Tailscale identity and application grants. It authenticate
 to the upstream database using either a username and password from a file or
 temporary credentials issued by HashiCorp Vault.
 
+https://github.com/user-attachments/assets/b1db1c22-649d-4337-8191-6b2b8210b200
+
 It supports PostgreSQL, ClickHouse native TCP, and ClickHouse HTTP in one process.
 
 ## Usage
